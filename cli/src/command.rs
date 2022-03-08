@@ -17,6 +17,7 @@
 use crate::cli::{Cli, Subcommand};
 use futures::future::TryFutureExt;
 use log::info;
+use polkadot_client::Client;
 use sc_cli::{Role, RuntimeVersion, SubstrateCli};
 use service::{self, IdentifyVariant};
 use sp_core::crypto::Ss58AddressFormatRegistry;
@@ -472,6 +473,80 @@ pub fn run() -> Result<()> {
 					.map_err(|e| Error::SubstrateCli(e))
 				})?)
 			}
+			#[cfg(not(feature = "polkadot-native"))]
+			panic!("No runtime feature (polkadot, kusama, westend, rococo) is enabled")
+		},
+		Some(Subcommand::BenchmarkBlock(cmd)) => {
+			let runner = cli.create_runner(cmd)?;
+			let chain_spec = &runner.config().chain_spec;
+			set_default_ss58_version(chain_spec);
+
+			#[cfg(feature = "kusama-native")]
+			{
+				if chain_spec.is_kusama() {
+					return Ok(runner.async_run(|mut config| {
+						let (client, _, _, task_manager) =
+							service::new_chain_ops(&mut config, None)?;
+						if let Client::Kusama(pd) = &*client {
+							Ok((
+								cmd.run(config, pd.clone()).map_err(Error::SubstrateCli),
+								task_manager,
+							))
+						} else {
+							unreachable!();
+						}
+					})?)
+				}
+			}
+
+			#[cfg(feature = "westend-native")]
+			{
+				if chain_spec.is_westend() {
+					return Ok(runner.async_run(|mut config| {
+						let (client, _, _, task_manager) =
+							service::new_chain_ops(&mut config, None)?;
+						if let Client::Westend(pd) = &*client {
+							Ok((
+								cmd.run(config, pd.clone()).map_err(Error::SubstrateCli),
+								task_manager,
+							))
+						} else {
+							unreachable!();
+						}
+					})?)
+				}
+			}
+
+			#[cfg(feature = "rococo-native")]
+			{
+				if chain_spec.is_rococo() {
+					return Ok(runner.async_run(|mut config| {
+						let (client, _, _, task_manager) =
+							service::new_chain_ops(&mut config, None)?;
+						if let Client::Rococo(pd) = &*client {
+							Ok((
+								cmd.run(config, pd.clone()).map_err(Error::SubstrateCli),
+								task_manager,
+							))
+						} else {
+							unreachable!();
+						}
+					})?)
+				}
+			}
+
+			#[cfg(feature = "polkadot-native")]
+			{
+				return Ok(runner.async_run(|mut config| {
+					let (client, _, _, task_manager) = service::new_chain_ops(&mut config, None)?;
+					if let Client::Polkadot(pd) = &*client {
+						Ok((cmd.run(config, pd.clone()).map_err(Error::SubstrateCli), task_manager))
+					} else {
+						unreachable!();
+					}
+				})?)
+			}
+
 			#[cfg(not(feature = "polkadot-native"))]
 			panic!("No runtime feature (polkadot, kusama, westend, rococo) is enabled")
 		},
